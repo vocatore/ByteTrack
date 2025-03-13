@@ -15,7 +15,7 @@ class STrack(BaseTrack):
     def __init__(self, tlwh, score):
 
         # wait activate
-        self._tlwh = np.asarray(tlwh, dtype=np.float)
+        self._tlwh = np.asarray(tlwh, dtype=np.float64)
         self.kalman_filter = None
         self.mean, self.covariance = None, None
         self.is_activated = False
@@ -163,16 +163,25 @@ class BYTETracker(object):
         lost_stracks = []
         removed_stracks = []
 
-        if output_results.shape[1] == 5:
+        if isinstance(output_results, torch.Tensor):
+            output_results = output_results.cpu().numpy()
+
+        if output_results.shape[1] >= 5:  # Se houver pelo menos 5 colunas
             scores = output_results[:, 4]
             bboxes = output_results[:, :4]
+            if output_results.shape[1] > 5:  # Se houver mais colunas
+                scores *= output_results[:, 5]
         else:
-            output_results = output_results.cpu().numpy()
-            scores = output_results[:, 4] * output_results[:, 5]
-            bboxes = output_results[:, :4]  # x1y1x2y2
-        img_h, img_w = img_info[0], img_info[1]
-        scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
-        bboxes /= scale
+            bboxes = np.array([])  # Definir um array vazio
+            scores = np.array([])  # Evitar erro na comparação abaixo
+
+        # Evitar erro caso scores esteja vazio
+        if scores.size > 0:
+            remain_inds = scores > self.args.track_thresh
+            inds_low = scores > 0.1
+        else:
+            remain_inds = np.array([])  # Evitar erro caso não haja detecções
+            inds_low = np.array([]) 
 
         remain_inds = scores > self.args.track_thresh
         inds_low = scores > 0.1
